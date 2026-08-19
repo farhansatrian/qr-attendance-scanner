@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>
+        QR Attendance Scanner
+    </title>
+
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js">
+    </script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: white;
+        }
+
+        .container {
+            max-width: 480px;
+            min-height: 100vh;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            margin: 0 0 6px;
+        }
+
+        .header p {
+            margin: 0;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        #reader {
+            width: 100%;
+            overflow: hidden;
+            border-radius: 16px;
+            background: black;
+        }
+
+        .status {
+            margin-top: 18px;
+            padding: 18px;
+            border-radius: 14px;
+            text-align: center;
+            min-height: 90px;
+        }
+
+        .status.ready {
+            background: #1f2937;
+        }
+
+        .status.processing {
+            background: #1e3a5f;
+        }
+
+        .status.success {
+            background: #166534;
+        }
+
+        .status.warning {
+            background: #854d0e;
+        }
+
+        .status.error {
+            background: #991b1b;
+        }
+
+        .status-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .status-name {
+            font-size: 18px;
+            margin-top: 8px;
+        }
+
+        .status-detail {
+            font-size: 13px;
+            color: rgba(255, 255, 255, .8);
+            margin-top: 6px;
+        }
+
+        button {
+            width: 100%;
+            min-height: 52px;
+            margin-top: 16px;
+            border: 0;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #startButton {
+            background: white;
+            color: #111827;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+
+</head>
+
+
+<body>
+
+    <div class="container">
+
+        <div class="header">
+
+            <h1>
+                QR Attendance
+            </h1>
+
+            <p>
+                Arahkan kamera ke QR tamu
+            </p>
+
+        </div>
+
+
+        <div id="reader"></div>
+
+
+        <div id="statusBox" class="status ready">
+
+            <div id="statusTitle" class="status-title">
+                Scanner siap
+            </div>
+
+            <div id="statusName" class="status-name"></div>
+
+            <div id="statusDetail" class="status-detail">
+                Tekan Mulai Scanner
+            </div>
+
+        </div>
+
+
+        <button id="startButton" onclick="startScanner()">
+            MULAI SCANNER
+        </button>
+
+    </div>
+
+
+    <script>
+
+        let qrScanner = null;
+
+        let scannerRunning = false;
+
+        let scanBusy = false;
+
+        let lastToken = '';
+
+        let lastTokenTime = 0;
+
+
+        // =====================================
+        // START SCANNER
+        // =====================================
+
+        async function startScanner() {
+
+            const button =
+                document.getElementById(
+                    'startButton'
+                );
+
+
+            button.disabled = true;
+
+            button.textContent =
+                'MEMBUKA KAMERA...';
+
+
+            try {
+
+                qrScanner =
+                    new Html5Qrcode(
+                        'reader'
+                    );
+
+
+                await qrScanner.start(
+
+                    {
+                        facingMode:
+                            'environment'
+                    },
+
+                    {
+                        fps: 10,
+
+                        qrbox: {
+                            width: 250,
+                            height: 250
+                        },
+
+                        aspectRatio:
+                            1.0
+                    },
+
+                    onScanSuccess,
+
+                    () => {
+                        // Ignore QR decode failure.
+                    }
+
+                );
+
+
+                scannerRunning = true;
+
+
+                button.classList.add(
+                    'hidden'
+                );
+
+
+                showStatus(
+                    'ready',
+                    'Scanner aktif',
+                    '',
+                    'Arahkan kamera ke QR tamu.'
+                );
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                button.disabled =
+                    false;
+
+
+                button.textContent =
+                    'COBA LAGI';
+
+
+                showStatus(
+                    'error',
+                    'Kamera gagal dibuka',
+                    '',
+                    String(error)
+                );
+
+            }
+
+        }
+
+
+        // =====================================
+        // QR FOUND
+        // =====================================
+
+        function onScanSuccess(
+            decodedText
+        ) {
+
+            if (scanBusy) {
+                return;
+            }
+
+
+            const now =
+                Date.now();
+
+
+            /*
+             * Jangan proses QR identik
+             * berulang kali dalam 5 detik.
+             */
+            if (
+                decodedText === lastToken &&
+                now - lastTokenTime < 5000
+            ) {
+                return;
+            }
+
+
+            lastToken =
+                decodedText;
+
+            lastTokenTime =
+                now;
+
+            scanBusy =
+                true;
+
+
+            try {
+
+                qrScanner.pause(
+                    true
+                );
+
+            }
+            catch (error) {
+                console.warn(error);
+            }
+
+
+            showStatus(
+                'processing',
+                'Memproses...',
+                '',
+                'Memeriksa data kehadiran.'
+            );
+
+
+            /*
+             * Scanner TIDAK mengubah attendance.
+             *
+             * Scanner hanya mengirim token
+             * ke aplikasi utama.
+             */
+            if (
+                !window.opener
+            ) {
+
+                showStatus(
+                    'error',
+                    'Scanner tidak terhubung',
+                    '',
+                    'Buka scanner melalui aplikasi QR Attendance.'
+                );
+
+                scanBusy = false;
+
+                return;
+            }
+
+
+            window.opener.postMessage(
+                {
+                    type:
+                        'QR_SCANNED',
+
+                    token:
+                        decodedText
+                },
+                '*'
+            );
+
+        }
+
+
+        // =====================================
+        // RESULT FROM APPS SCRIPT
+        // =====================================
+
+        window.addEventListener(
+            'message',
+            function (event) {
+
+                /*
+                 * Hanya menerima pesan
+                 * dari window yang membuka scanner.
+                 */
+                if (
+                    event.source !== window.opener
+                ) {
+                    return;
+                }
+
+
+                const message =
+                    event.data;
+
+
+                if (
+                    !message ||
+                    message.type !==
+                    'CHECKIN_RESULT'
+                ) {
+                    return;
+                }
+
+
+                handleCheckinResult(
+                    message.result
+                );
+
+            }
+        );
+
+
+        // =====================================
+        // HANDLE RESULT
+        // =====================================
+
+        function handleCheckinResult(
+            result
+        ) {
+
+            if (!result) {
+
+                showStatus(
+                    'error',
+                    'System Error',
+                    '',
+                    'Tidak ada response dari server.'
+                );
+
+
+                resumeAfter(
+                    3000
+                );
+
+                return;
+
+            }
+
+
+            // ===============================
+            // SUCCESS
+            // ===============================
+
+            if (
+                result.success &&
+                result.code ===
+                'CHECKIN_SUCCESS'
+            ) {
+
+                showStatus(
+                    'success',
+
+                    '✓ CHECK-IN BERHASIL',
+
+                    result.guest
+                        ? result.guest.name
+                        : '',
+
+                    result.guest
+                        ? result.guest.checkin_at
+                        : ''
+                );
+
+
+                vibrateSuccess();
+
+
+                resumeAfter(
+                    1800
+                );
+
+                return;
+
+            }
+
+
+            // ===============================
+            // DUPLICATE
+            // ===============================
+
+            if (
+                result.code ===
+                'ALREADY_CHECKED_IN'
+            ) {
+
+                showStatus(
+                    'warning',
+
+                    '⚠ SUDAH CHECK-IN',
+
+                    result.guest
+                        ? result.guest.name
+                        : '',
+
+                    result.guest
+                        ? (
+                            'Check-in sebelumnya: ' +
+                            (
+                                result.guest.checkin_at ||
+                                '-'
+                            )
+                        )
+                        : ''
+                );
+
+
+                resumeAfter(
+                    3000
+                );
+
+                return;
+
+            }
+
+
+            // ===============================
+            // INVALID QR
+            // ===============================
+
+            if (
+                result.code ===
+                'INVALID_QR'
+            ) {
+
+                showStatus(
+                    'error',
+
+                    '✕ QR TIDAK VALID',
+
+                    '',
+
+                    'QR tidak terdaftar pada event ini.'
+                );
+
+
+                resumeAfter(
+                    2500
+                );
+
+                return;
+
+            }
+
+
+            // ===============================
+            // OTHER ERRORS
+            // ===============================
+
+            showStatus(
+                'error',
+
+                'CHECK-IN GAGAL',
+
+                '',
+
+                result.message ||
+                'Terjadi kesalahan.'
+            );
+
+
+            resumeAfter(
+                3000
+            );
+
+        }
+
+
+        // =====================================
+        // AUTO RESUME
+        // =====================================
+
+        function resumeAfter(
+            delay
+        ) {
+
+            setTimeout(
+                function () {
+
+                    scanBusy =
+                        false;
+
+
+                    try {
+
+                        qrScanner.resume();
+
+                    }
+
+                    catch (error) {
+
+                        console.warn(
+                            error
+                        );
+
+                    }
+
+
+                    showStatus(
+                        'ready',
+                        'Scanner aktif',
+                        '',
+                        'Siap scan tamu berikutnya.'
+                    );
+
+                },
+
+                delay
+            );
+
+        }
+
+
+        // =====================================
+        // STATUS UI
+        // =====================================
+
+        function showStatus(
+            type,
+            title,
+            name,
+            detail
+        ) {
+
+            const box =
+                document.getElementById(
+                    'statusBox'
+                );
+
+
+            box.className =
+                'status ' + type;
+
+
+            document.getElementById(
+                'statusTitle'
+            ).textContent =
+                title || '';
+
+
+            document.getElementById(
+                'statusName'
+            ).textContent =
+                name || '';
+
+
+            document.getElementById(
+                'statusDetail'
+            ).textContent =
+                detail || '';
+
+        }
+
+
+        // =====================================
+        // VIBRATION
+        // =====================================
+
+        function vibrateSuccess() {
+
+            if (
+                navigator.vibrate
+            ) {
+
+                navigator.vibrate(
+                    [100, 50, 100]
+                );
+
+            }
+
+        }
+
+    </script>
+
+</body>
+
+</html>
